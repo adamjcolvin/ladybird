@@ -212,6 +212,7 @@
 #include <LibWeb/WebIDL/ExceptionOr.h>
 #include <LibWeb/WebIDL/ObservableArray.h>
 #include <LibWeb/XPath/XPath.h>
+#include <LibWeb/XPath/XPathResult.h>
 
 namespace Web::DOM {
 
@@ -4156,6 +4157,23 @@ void Document::unregister_node_iterator(Badge<NodeIterator>, NodeIterator& node_
 {
     bool was_removed = m_node_iterators.remove(&node_iterator);
     VERIFY(was_removed);
+}
+
+void Document::register_xpath_result(Badge<XPath::XPathResult>, XPath::XPathResult& xpath_result)
+{
+    auto result = m_xpath_iterators.set(xpath_result);
+    VERIFY(result == AK::HashSetResult::InsertedNewEntry);
+}
+
+void Document::unregister_xpath_result(Badge<XPath::XPathResult>, XPath::XPathResult& xpath_result)
+{
+    m_xpath_iterators.remove(xpath_result);
+}
+
+void Document::invalidate_xpath_iterators()
+{
+    for (auto& xpath_result : m_xpath_iterators)
+        xpath_result->invalidate();
 }
 
 void Document::register_document_observer(Badge<DocumentObserver>, DocumentObserver& document_observer)

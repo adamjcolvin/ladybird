@@ -115,7 +115,7 @@ static xmlNodePtr mirror_node(xmlDocPtr doc, DOM::Node const& node)
     return nullptr;
 }
 
-static void convert_xpath_result(xmlXPathObjectPtr xpath_result, XPath::XPathResult* result, unsigned short type)
+static void convert_xpath_result(xmlXPathObjectPtr xpath_result, XPath::XPathResult* result, unsigned short type, GC::Ptr<DOM::Document> document)
 {
     if (!xpath_result) {
         return;
@@ -137,7 +137,7 @@ static void convert_xpath_result(xmlXPathObjectPtr xpath_result, XPath::XPathRes
             }
         }
 
-        result->set_node_set(move(node_list), type);
+        result->set_node_set(move(node_list), type, document);
         break;
     }
     case XPATH_BOOLEAN: {
@@ -203,7 +203,7 @@ WebIDL::ExceptionOr<GC::Ref<XPathResult>> evaluate(JS::Realm& realm, String cons
         result = realm.create<XPathResult>(realm);
     }
 
-    convert_xpath_result(xpath_result, result, type);
+    convert_xpath_result(xpath_result, result, type, const_cast<DOM::Document*>(&context_node.document()));
 
     return GC::Ref<XPathResult>(*result);
 }
