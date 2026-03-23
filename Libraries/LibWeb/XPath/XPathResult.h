@@ -10,6 +10,7 @@
 #include <AK/Vector.h>
 #include <LibWeb/Bindings/PlatformObject.h>
 #include <LibWeb/Forward.h>
+#include <LibWeb/WebIDL/ExceptionOr.h>
 #include <LibWeb/WebIDL/Types.h>
 
 namespace Web::XPath {
@@ -19,6 +20,8 @@ class XPathResult : public Bindings::PlatformObject {
     GC_DECLARE_ALLOCATOR(XPathResult);
 
 public:
+    static constexpr bool OVERRIDES_FINALIZE = true;
+
     static WebIDL::UnsignedShort const ANY_TYPE = 0;
     static WebIDL::UnsignedShort const NUMBER_TYPE = 1;
     static WebIDL::UnsignedShort const STRING_TYPE = 2;
@@ -34,6 +37,7 @@ public:
     virtual ~XPathResult() override;
     virtual void initialize(JS::Realm&) override;
     virtual void visit_edges(Cell::Visitor&) override;
+    virtual void finalize() override;
 
     WebIDL::UnsignedShort result_type() const { return m_result_type; }
     WebIDL::Double number_value() const { return m_number_value; }
@@ -43,13 +47,15 @@ public:
     WebIDL::Boolean invalid_iterator_state() const { return m_invalid_iterator_state; }
     WebIDL::UnsignedLong snapshot_length() const { return m_node_set.size(); }
 
-    GC::Ptr<DOM::Node> iterate_next();
+    WebIDL::ExceptionOr<GC::Ptr<DOM::Node>> iterate_next();
     GC::Ptr<DOM::Node> snapshot_item(int index);
 
     void set_number(WebIDL::Double number_value);
     void set_string(String string_value);
     void set_boolean(bool boolean_value);
-    void set_node_set(Vector<GC::Ptr<DOM::Node>> node_set, unsigned short type);
+    void set_node_set(Vector<GC::Ptr<DOM::Node>> node_set, unsigned short type, GC::Ptr<DOM::Document> document);
+
+    void invalidate() { m_invalid_iterator_state = true; }
 
 private:
     WebIDL::UnsignedShort m_result_type { 0 };
@@ -58,6 +64,8 @@ private:
     WebIDL::Boolean m_boolean_value { false };
     WebIDL::Boolean m_invalid_iterator_state { false };
     WebIDL::UnsignedLong m_snapshot_length { 0 };
+
+    GC::Ptr<DOM::Document> m_document;
 
     Vector<GC::Ptr<DOM::Node>> m_node_set;
     Vector<GC::Ptr<DOM::Node>>::Iterator m_node_set_iter;

@@ -823,6 +823,8 @@ void Node::insert_before(GC::Ref<Node> node, GC::Ptr<Node> child, bool suppress_
         queue_tree_mutation_record(nodes, {}, previous_sibling.ptr(), child.ptr());
     }
 
+    document().invalidate_xpath_iterators();
+
     // 9. Run the children changed steps for parent.
     ChildrenChangedMetadata metadata { ChildrenChangedMetadata::Type::Inserted, node };
     children_changed(metadata);
@@ -974,6 +976,8 @@ void Node::remove(bool suppress_observers)
     document().for_each_node_iterator([&](NodeIterator& node_iterator) {
         node_iterator.run_pre_removing_steps(*this);
     });
+
+    document().invalidate_xpath_iterators();
 
     // 5. Let oldPreviousSibling be node’s previous sibling.
     GC::Ptr<Node> old_previous_sibling = previous_sibling();
@@ -1310,6 +1314,8 @@ WebIDL::ExceptionOr<void> Node::move_node(Node& new_parent, Node* child)
     document().for_each_node_iterator([&](NodeIterator& node_iterator) {
         node_iterator.run_pre_removing_steps(*this);
     });
+
+    document().invalidate_xpath_iterators();
 
     // 11. Let oldPreviousSibling be node’s previous sibling.
     auto* old_previous_sibling = previous_sibling();

@@ -8,7 +8,10 @@
 #include <LibWeb/Bindings/Intrinsics.h>
 #include <LibWeb/Bindings/PlatformObject.h>
 #include <LibWeb/Bindings/XPathResultPrototype.h>
+#include <LibWeb/DOM/Document.h>
 #include <LibWeb/DOM/Node.h>
+#include <LibWeb/WebIDL/DOMException.h>
+#include <LibWeb/WebIDL/ExceptionOr.h>
 
 #include "XPathResult.h"
 
@@ -32,8 +35,16 @@ void XPathResult::visit_edges(Cell::Visitor& visitor)
 {
     Base::visit_edges(visitor);
     visitor.visit(m_node_set);
+    visitor.visit(m_document);
     if (!m_node_set_iter.is_end())
         visitor.visit(*m_node_set_iter);
+}
+
+void XPathResult::finalize()
+{
+    Base::finalize();
+    if (m_document)
+        m_document->unregister_xpath_result({}, *this);
 }
 
 XPathResult::~XPathResult() = default;
@@ -55,21 +66,44 @@ void XPathResult::set_boolean(bool boolean_value)
     m_boolean_value = boolean_value;
 }
 
-void XPathResult::set_node_set(Vector<GC::Ptr<DOM::Node>> node_set, unsigned short type)
+void XPathResult::set_node_set(Vector<GC::Ptr<DOM::Node>> node_set, unsigned short type, GC::Ptr<DOM::Document> document)
 {
+    if (m_document)
+        m_document->unregister_xpath_result({}, *this);
+    m_document = nullptr;
+    m_invalid_iterator_state = false;
+
     if (type >= XPathResult::UNORDERED_NODE_ITERATOR_TYPE && type <= XPathResult::FIRST_ORDERED_NODE_TYPE)
         m_result_type = type;
+    else if (type == ANY_TYPE)
+        m_result_type = UNORDERED_NODE_ITERATOR_TYPE;
+    else if (type == NUMBER_TYPE || type == STRING_TYPE || type == BOOLEAN_TYPE)
+        m_result_type = type;
     else
-        m_result_type = UNORDERED_NODE_ITERATOR_TYPE; // Default if the caller does not explicity ask for anything else
+        m_result_type = UNORDERED_NODE_ITERATOR_TYPE; // Default for unrecognized resultType values
 
     m_node_set = move(node_set);
     m_node_set_iter = m_node_set.begin();
+
+    // https://www.w3.org/TR/DOM-Level-3-XPath/xpath.html#XPathResult
+    if (m_result_type == UNORDERED_NODE_ITERATOR_TYPE || m_result_type == ORDERED_NODE_ITERATOR_TYPE) {
+        m_document = document;
+        if (m_document)
+            m_document->register_xpath_result({}, *this);
+    }
 }
 
-GC::Ptr<DOM::Node> XPathResult::iterate_next()
+// https://www.w3.org/TR/DOM-Level-3-XPath/xpath.html#XPathResult-iterateNext
+WebIDL::ExceptionOr<GC::Ptr<DOM::Node>> XPathResult::iterate_next()
 {
+    if (m_result_type != UNORDERED_NODE_ITERATOR_TYPE && m_result_type != ORDERED_NODE_ITERATOR_TYPE)
+        return WebIDL::SimpleException { WebIDL::SimpleExceptionType::TypeError, "XPathResult is not an iterator type"_string };
+
+    if (m_invalid_iterator_state)
+        return WebIDL::InvalidStateError::create(realm(), "The document has been mutated since the XPathResult was returned"_utf16);
+
     if (m_node_set_iter == m_node_set.end())
-        return nullptr;
+        return GC::Ptr<DOM::Node> {};
 
     return *m_node_set_iter++;
 }

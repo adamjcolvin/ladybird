@@ -627,6 +627,11 @@ public:
     void register_node_iterator(Badge<NodeIterator>, NodeIterator&);
     void unregister_node_iterator(Badge<NodeIterator>, NodeIterator&);
 
+    void register_xpath_result(Badge<XPath::XPathResult>, XPath::XPathResult&);
+    void unregister_xpath_result(Badge<XPath::XPathResult>, XPath::XPathResult&);
+
+    void invalidate_xpath_iterators();
+
     void register_document_observer(Badge<DocumentObserver>, DocumentObserver&);
     void unregister_document_observer(Badge<DocumentObserver>, DocumentObserver&);
 
@@ -1265,6 +1270,7 @@ private:
     bool m_needs_animated_style_update { false };
 
     HashTable<GC::Ptr<NodeIterator>> m_node_iterators;
+    HashTable<GC::RawRef<XPath::XPathResult>> m_xpath_iterators;
 
     // Document should not visit DocumentObserver to avoid leaks.
     // It's responsibility of object that requires DocumentObserver to keep it alive.
