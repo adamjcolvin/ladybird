@@ -315,6 +315,7 @@ void dump_tree(StringBuilder& builder, Layout::Node const& layout_node, bool sho
             case Layout::FormattingContext::Type::Block:
             case Layout::FormattingContext::Type::Flex:
             case Layout::FormattingContext::Type::Grid:
+            case Layout::FormattingContext::Type::MultiColumn:
             case Layout::FormattingContext::Type::Table:
             case Layout::FormattingContext::Type::SVG:
                 builder.appendff(" [{}{}{}]", formatting_context_color_on, Layout::FormattingContext::type_name(formatting_context_type.value()), color_off);

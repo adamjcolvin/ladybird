@@ -753,6 +753,7 @@ set(SOURCES
     Layout/FlexFormattingContext.cpp
     Layout/FormattingContext.cpp
     Layout/GridFormattingContext.cpp
+    Layout/MultiColumnFormattingContext.cpp
     Layout/ImageBox.cpp
     Layout/ImageProvider.cpp
     Layout/InlineFormattingContext.cpp
