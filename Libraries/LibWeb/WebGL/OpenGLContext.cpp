@@ -378,8 +378,6 @@ void OpenGLContext::allocate_vkimage_painting_surface()
     glGenTextures(1, &m_impl->color_buffer);
     glBindTexture(GL_TEXTURE_2D, m_impl->color_buffer);
     glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, m_impl->egl_image);
-
-    glViewport(0, 0, m_size.width(), m_size.height());
 }
 #endif
 
@@ -423,6 +421,12 @@ void OpenGLContext::allocate_painting_surface_if_needed()
     }
 
     VERIFY(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+
+    // Per the WebGL spec the initial viewport covers the entire drawing buffer.
+    // With a surfaceless EGL context (EGL_NO_SURFACE) the GLES3 context starts with
+    // a 0×0 viewport, so we must set it explicitly here — and again whenever the
+    // canvas is resized and the drawing surface is reallocated.
+    glViewport(0, 0, m_size.width(), m_size.height());
 #endif
 }
 
@@ -502,7 +506,9 @@ Vector<String> OpenGLContext::get_supported_opengl_extensions()
     }
 
     auto const* requestable_extensions_string = reinterpret_cast<char const*>(glGetString(GL_REQUESTABLE_EXTENSIONS_ANGLE));
-    StringView requestable_extensions_view(requestable_extensions_string, strlen(requestable_extensions_string));
+    StringView requestable_extensions_view = requestable_extensions_string
+        ? StringView { requestable_extensions_string, strlen(requestable_extensions_string) }
+        : StringView {};
     for (auto extension : requestable_extensions_view.split_view(' ')) {
         extensions.append(MUST(String::from_utf8(extension)));
     }
