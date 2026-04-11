@@ -27,6 +27,7 @@ extern "C" {
 #include <LibWeb/WebGL/Extensions/EXTBlendMinMax.h>
 #include <LibWeb/WebGL/Extensions/EXTColorBufferFloat.h>
 #include <LibWeb/WebGL/Extensions/EXTFloatBlend.h>
+#include <LibWeb/WebGL/Extensions/OESTextureFloatLinear.h>
 #include <LibWeb/WebGL/Extensions/EXTRenderSnorm.h>
 #include <LibWeb/WebGL/Extensions/EXTTextureFilterAnisotropic.h>
 #include <LibWeb/WebGL/Extensions/EXTTextureNorm16.h>
@@ -120,7 +121,7 @@ static HashMap<String, Extension, AK::ASCIICaseInsensitiveStringTraits> s_availa
     { "OES_element_index_uint"_string, { { "GL_OES_element_index_uint"sv }, Extensions::OESElementIndexUint::create, OpenGLContext::WebGLVersion::WebGL1 } },
     { "OES_standard_derivatives"_string, { { "GL_OES_standard_derivatives"sv }, Extensions::OESStandardDerivatives::create, OpenGLContext::WebGLVersion::WebGL1 } },
     { "OES_texture_float"_string, { { "GL_OES_texture_float"sv }, nullptr, OpenGLContext::WebGLVersion::WebGL1 } },
-    { "OES_texture_float_linear"_string, { { "GL_OES_texture_float_linear"sv }, nullptr } },
+    { "OES_texture_float_linear"_string, { { "GL_OES_texture_float_linear"sv }, Extensions::OESTextureFloatLinear::create } },
     { "OES_texture_half_float"_string, { { "GL_OES_texture_half_float"sv }, nullptr, OpenGLContext::WebGLVersion::WebGL1 } },
     { "OES_texture_half_float_linear"_string, { { "GL_OES_texture_half_float_linear"sv }, nullptr, OpenGLContext::WebGLVersion::WebGL1 } },
     { "OES_vertex_array_object"_string, { { "GL_OES_vertex_array_object"sv }, Extensions::OESVertexArrayObject::create, OpenGLContext::WebGLVersion::WebGL1 } },

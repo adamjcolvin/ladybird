@@ -1111,6 +1111,7 @@ set(SOURCES
     WebGL/Extensions/EXTBlendMinMax.cpp
     WebGL/Extensions/EXTColorBufferFloat.cpp
     WebGL/Extensions/EXTFloatBlend.cpp
+    WebGL/Extensions/OESTextureFloatLinear.cpp
     WebGL/Extensions/EXTRenderSnorm.cpp
     WebGL/Extensions/EXTTextureFilterAnisotropic.cpp
     WebGL/Extensions/EXTTextureNorm16.cpp

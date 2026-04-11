@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<canvas id="c" width="300" height="300"></canvas>
+<script src="../include.js"></script>
+<script>
+// Self-contained reproduction of Three.js's two-pass float RT pipeline.
+// Does NOT require network or Three.js — replicates the exact GL operations.
+//
+// T1: drawElements → RGBA8 FBO (baseline)
+// T2: drawElements → RGBA32F FBO (no depth)
+// T3: drawElements → RGBA32F FBO + DEPTH24 renderbuffer (Three.js default)
+// T4: sample RGBA32F texture via fragment shader
+// T5: full pipeline — float RT (with depth) → screen, AdditiveBlending
+
+promiseTest(async () => {
+    const canvas = document.getElementById('c');
+    const gl = canvas.getContext('webgl2');
+    if (!gl) { println('FIXME: This test relies on having a GPU backend enabled, which it is not in run-tests mode :('); return; }
+
+    function compileShader(type, src) {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+            throw new Error('shader compile: ' + gl.getShaderInfoLog(s));
+        return s;
+    }
+    function linkProgram(vs, fs) {
+        const p = gl.createProgram();
+        gl.attachShader(p, vs);
+        gl.attachShader(p, fs);
+        gl.linkProgram(p);
+        if (!gl.getProgramParameter(p, gl.LINK_STATUS))
+            throw new Error('link: ' + gl.getProgramInfoLog(p));
+        return p;
+    }
+    function makeVAO(prog) {
+        const pos = new Float32Array([-1,-1, 3,-1, -1,3]);
+        const idx = new Uint16Array([0,1,2]);
+        const vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
+        const vbo = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+        gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
+        const ebo = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+        const loc = gl.getAttribLocation(prog, 'aPos');
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+        gl.bindVertexArray(null);
+        return vao;
+    }
+    function readByte(x, y) { const p=new Uint8Array(4); gl.readPixels(x,y,1,1,gl.RGBA,gl.UNSIGNED_BYTE,p); return p; }
+    function readFloat(x, y) { const p=new Float32Array(4); gl.readPixels(x,y,1,1,gl.RGBA,gl.FLOAT,p); return p; }
+    function check(label, pass, detail) { println(pass ? `PASS  ${label}: ${detail}` : `FAIL  ${label}: ${detail}`); }
+
+    const cbf = gl.getExtension('EXT_color_buffer_float');
+
+    const SOLID_VS = `#version 300 es\nin vec2 aPos;\nvoid main(){gl_Position=vec4(aPos,0,1);}`;
+    const SOLID_FS = `#version 300 es\nprecision highp float;\nout vec4 o;\nvoid main(){o=vec4(0.8,0.4,0.2,1.0);}`;
+
+    const SAMPLE_VS = `#version 300 es\nin vec2 aPos;\nout vec2 vUV;\nvoid main(){vUV=aPos*.5+.5;gl_Position=vec4(aPos,0,1);}`;
+    const SAMPLE_FS = `#version 300 es\nprecision highp float;\nuniform sampler2D uTex;\nin vec2 vUV;\nout vec4 o;\nvoid main(){o=texture(uTex,vUV);}`;
+
+    // ── T1: drawElements → RGBA8 FBO ─────────────────────────────────────────
+    {
+        const prog = linkProgram(compileShader(gl.VERTEX_SHADER, SOLID_VS), compileShader(gl.FRAGMENT_SHADER, SOLID_FS));
+        const vao = makeVAO(prog);
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 4, 4, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        const fb = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+        gl.viewport(0,0,4,4); gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT); gl.disable(gl.BLEND);
+        gl.useProgram(prog); gl.bindVertexArray(vao);
+        gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_SHORT, 0);
+        gl.bindVertexArray(null);
+        const px = readByte(2,2);
+        check('T1 drawElements→RGBA8', px[0]>200, `px=${[...px]} err=${gl.getError()}`);
+    }
+
+    // ── T2: drawElements → RGBA32F FBO (no depth) ────────────────────────────
+    let floatTex = null;
+    if (!cbf) { println('SKIP  T2: no EXT_color_buffer_float'); } else {
+        const prog = linkProgram(compileShader(gl.VERTEX_SHADER, SOLID_VS), compileShader(gl.FRAGMENT_SHADER, SOLID_FS));
+        const vao = makeVAO(prog);
+        floatTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, floatTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 4, 4, 0, gl.RGBA, gl.FLOAT, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        const fb = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, floatTex, 0);
+        const status2 = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+        gl.viewport(0,0,4,4); gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT); gl.disable(gl.BLEND);
+        gl.useProgram(prog); gl.bindVertexArray(vao);
+        gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_SHORT, 0);
+        gl.bindVertexArray(null);
+        const fp = readFloat(2,2);
+        check('T2 drawElements→RGBA32F', fp[0]>0.5, `fp=[${fp[0].toFixed(2)},${fp[1].toFixed(2)}] fboStatus=0x${status2.toString(16)} err=${gl.getError()}`);
+    }
+
+    // ── T3: RGBA32F FBO + DEPTH24 renderbuffer (Three.js default) ────────────
+    let floatDepthTex = null;
+    if (!cbf) { println('SKIP  T3: no EXT_color_buffer_float'); } else {
+        const W=300, H=300;
+        const prog = linkProgram(compileShader(gl.VERTEX_SHADER, SOLID_VS), compileShader(gl.FRAGMENT_SHADER, SOLID_FS));
+        const vao = makeVAO(prog);
+        floatDepthTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, floatDepthTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, W, H, 0, gl.RGBA, gl.FLOAT, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        const depthRB = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, depthRB);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, W, H);
+        const fb = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, floatDepthTex, 0);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRB);
+        const status3 = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+        gl.viewport(0,0,W,H); gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.disable(gl.BLEND);
+        gl.useProgram(prog); gl.bindVertexArray(vao);
+        gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_SHORT, 0);
+        gl.bindVertexArray(null);
+        const fp = readFloat(150, 150);
+        check('T3 RGBA32F+depth FBO', fp[0]>0.5, `fp=[${fp[0].toFixed(2)},${fp[1].toFixed(2)}] fboStatus=0x${status3.toString(16)} err=${gl.getError()}`);
+    }
+
+    // ── T4: sample RGBA32F texture ────────────────────────────────────────────
+    if (!cbf) { println('SKIP  T4: no EXT_color_buffer_float'); } else {
+        const src = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, src);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT, new Float32Array([0.6,0.3,0.1,1]));
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        const prog = linkProgram(compileShader(gl.VERTEX_SHADER, SAMPLE_VS), compileShader(gl.FRAGMENT_SHADER, SAMPLE_FS));
+        const vao = makeVAO(prog);
+        const outTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, outTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 4, 4, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        const fb = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, outTex, 0);
+        gl.viewport(0,0,4,4); gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT); gl.disable(gl.BLEND);
+        gl.useProgram(prog);
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, src);
+        gl.uniform1i(gl.getUniformLocation(prog,'uTex'), 0);
+        gl.bindVertexArray(vao); gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_SHORT, 0); gl.bindVertexArray(null);
+        const px = readByte(2,2);
+        check('T4 sample float32 tex', px[0]>100, `px=${[...px]} err=${gl.getError()} (expect ~153,76,25)`);
+    }
+
+    // ── T5: full pipeline — RGBA32F+depth FBO → screen with AdditiveBlending ─
+    if (!cbf || !floatDepthTex) { println('SKIP  T5: prerequisite unavailable'); } else {
+        const prog = linkProgram(compileShader(gl.VERTEX_SHADER, SAMPLE_VS), compileShader(gl.FRAGMENT_SHADER, SAMPLE_FS));
+        const vao = makeVAO(prog);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0,0,300,300);
+        gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.enable(gl.BLEND);
+        gl.blendEquation(gl.FUNC_ADD);
+        gl.blendFunc(gl.ONE, gl.ONE);
+        gl.useProgram(prog);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, floatDepthTex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.uniform1i(gl.getUniformLocation(prog,'uTex'), 0);
+        gl.bindVertexArray(vao); gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_SHORT, 0); gl.bindVertexArray(null);
+        gl.disable(gl.BLEND);
+        const px = readByte(150, 150);
+        check('T5 float+depth RT→screen additive', px[0]>100, `px=${[...px]} err=${gl.getError()} (expect ~204,102,51)`);
+    }
+});
+</script>
