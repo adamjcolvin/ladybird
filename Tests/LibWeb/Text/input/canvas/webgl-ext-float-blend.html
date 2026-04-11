@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<canvas id="canvas" width="1" height="1"></canvas>
+<script src="../include.js"></script>
+<script>
+// Reproduces the missing EXT_float_blend extension in Ladybird's WebGL2
+// implementation. Without it, Three.js silently produces blank output when
+// rendering to FloatType render targets with blending enabled — which is exactly
+// what GitHub's homepage mascot (cat, duck, copilot) shaders do.
+//
+// Expected (correct):
+//   EXT_float_blend: supported
+//   Float blended render target: non-zero pixel
+//
+// Current Ladybird output (broken):
+//   EXT_float_blend: not supported
+//   Float blended render target: blank pixel
+promiseTest(async () => {
+    const gl = canvas.getContext("webgl2");
+    if (!gl) {
+        println("FIXME: This test relies on having a GPU backend enabled, which it is not in run-tests mode :(");
+        return;
+    }
+
+    // Check 1: extension presence
+    const ext = gl.getExtension("EXT_float_blend");
+    println(`EXT_float_blend: ${ext ? "supported" : "not supported"}`);
+
+    // Check 2: float render target with blending produces non-zero output.
+    // This is the direct reproduction of what Three.js does for matcap/SSS
+    // materials. Without EXT_float_blend the spec says behaviour is undefined
+    // when blending is enabled on a float-format framebuffer — in practice
+    // Ladybird silently outputs black.
+    const vs = gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vs, `#version 300 es
+        void main() {
+            vec2 pos[3];
+            pos[0] = vec2(-1.0, -1.0);
+            pos[1] = vec2( 3.0, -1.0);
+            pos[2] = vec2(-1.0,  3.0);
+            gl_Position = vec4(pos[gl_VertexID], 0.0, 1.0);
+        }
+    `);
+    gl.compileShader(vs);
+
+    const fs = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fs, `#version 300 es
+        precision highp float;
+        out vec4 fragColor;
+        void main() { fragColor = vec4(1.0); }
+    `);
+    gl.compileShader(fs);
+
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        println(`Shader link error: ${gl.getProgramInfoLog(prog)}`);
+        println("Float blended render target: shader error");
+        return;
+    }
+
+    // RGBA32F framebuffer — requires EXT_color_buffer_float (present in all
+    // three browsers) plus EXT_float_blend to blend into it.
+    const colorBufFloatExt = gl.getExtension("EXT_color_buffer_float");
+    if (!colorBufFloatExt) {
+        println("Float blended render target: EXT_color_buffer_float missing, skipped");
+        return;
+    }
+
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    // Additive blending into the float target — this is what requires EXT_float_blend.
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE);
+
+    gl.useProgram(prog);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    gl.disable(gl.BLEND);
+
+    // Read back as float
+    const pixels = new Float32Array(4);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, pixels);
+
+    println(`Float blended render target: ${pixels[0] > 0.0 ? "non-zero pixel" : "blank pixel"}`);
+});
+</script>

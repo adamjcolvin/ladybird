@@ -17,6 +17,12 @@ GC_DEFINE_ALLOCATOR(EXTColorBufferFloat);
 
 JS::ThrowCompletionOr<GC::Ref<JS::Object>> EXTColorBufferFloat::create(JS::Realm& realm, GC::Ref<WebGLRenderingContextBase> context)
 {
+    // Enabling EXT_color_buffer_float without also enabling GL_EXT_float_blend leaves blending on
+    // float framebuffers disabled in ANGLE (INVALID_OPERATION / zeroed output). Real-world code such
+    // as Three.js requests EXT_color_buffer_float and relies on float blending working, mirroring
+    // Chromium's behaviour where both are enabled together. If ANGLE does not support
+    // GL_EXT_float_blend on this platform the call is a no-op.
+    context->context().request_extension("GL_EXT_float_blend");
     return realm.create<EXTColorBufferFloat>(realm, context);
 }
 

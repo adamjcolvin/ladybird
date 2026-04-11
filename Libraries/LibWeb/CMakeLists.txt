@@ -1110,6 +1110,7 @@ set(SOURCES
     WebGL/Extensions/ANGLEInstancedArrays.cpp
     WebGL/Extensions/EXTBlendMinMax.cpp
     WebGL/Extensions/EXTColorBufferFloat.cpp
+    WebGL/Extensions/EXTFloatBlend.cpp
     WebGL/Extensions/EXTRenderSnorm.cpp
     WebGL/Extensions/EXTTextureFilterAnisotropic.cpp
     WebGL/Extensions/EXTTextureNorm16.cpp

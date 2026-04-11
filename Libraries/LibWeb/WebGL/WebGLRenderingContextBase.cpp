@@ -26,6 +26,7 @@ extern "C" {
 #include <LibWeb/WebGL/Extensions/ANGLEInstancedArrays.h>
 #include <LibWeb/WebGL/Extensions/EXTBlendMinMax.h>
 #include <LibWeb/WebGL/Extensions/EXTColorBufferFloat.h>
+#include <LibWeb/WebGL/Extensions/EXTFloatBlend.h>
 #include <LibWeb/WebGL/Extensions/EXTRenderSnorm.h>
 #include <LibWeb/WebGL/Extensions/EXTTextureFilterAnisotropic.h>
 #include <LibWeb/WebGL/Extensions/EXTTextureNorm16.h>
@@ -138,7 +139,7 @@ static HashMap<String, Extension, AK::ASCIICaseInsensitiveStringTraits> s_availa
     { "EXT_depth_clamp"_string, { { "GL_EXT_depth_clamp"sv }, nullptr } },
     { "EXT_disjoint_timer_query"_string, { { "GL_EXT_disjoint_timer_query"sv }, nullptr, OpenGLContext::WebGLVersion::WebGL1 } },
     { "EXT_disjoint_timer_query_webgl2"_string, { { "GL_EXT_disjoint_timer_query"sv }, nullptr, OpenGLContext::WebGLVersion::WebGL2 } },
-    { "EXT_float_blend"_string, { { "GL_EXT_float_blend"sv }, nullptr } },
+    { "EXT_float_blend"_string, { { "GL_EXT_float_blend"sv }, Extensions::EXTFloatBlend::create } },
     { "EXT_polygon_offset_clamp"_string, { { "GL_EXT_polygon_offset_clamp"sv }, nullptr } },
     { "EXT_render_snorm"_string, { { "GL_EXT_render_snorm"sv }, Extensions::EXTRenderSnorm::create, OpenGLContext::WebGLVersion::WebGL2 } },
     { "EXT_sRGB"_string, { { "GL_EXT_sRGB"sv }, nullptr, OpenGLContext::WebGLVersion::WebGL1 } },
