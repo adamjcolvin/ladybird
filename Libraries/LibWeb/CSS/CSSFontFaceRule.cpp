@@ -236,7 +236,7 @@ void CSSFontFaceRule::set_parent_style_sheet(CSSStyleSheet* parent_style_sheet)
 
     Base::set_parent_style_sheet(parent_style_sheet);
 
-    if (m_parent_style_sheet)
+    if (m_parent_style_sheet && is_valid())
         m_parent_style_sheet->add_critical_subresource(*this);
 }
 
